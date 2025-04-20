@@ -22,6 +22,10 @@ struct uv_readings {
   float leftUV, rightUV;
 };
 
+struct mpu_readings {
+  float roll, pitch;
+};
+
 struct sensor_data {
   float l_uv, r_uv, v1, i1, v2, i2, roll, pitch, espTemperature;
   char timestamp[20];
@@ -31,6 +35,7 @@ struct sensor_data {
 float get_esp_temperature();
 
 uv_readings read_uv();
+mpu_readings read_mpu();
 float get_load_current();
 float get_load_voltage();
 float uv_bit_to_mW(int16_t raw);

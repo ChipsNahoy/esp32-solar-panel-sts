@@ -72,7 +72,7 @@ void setup_suite() {
 void process_routine() {
   preferences.begin("esp32_config", false);
   bool justDebugged = preferences.getBool("justDebugged", true);
-  time_t currentTime = time(nullptr);
+  time_t currentTime = rtc.now().unixtime();
   if (justDebugged) {
     adjust_panel_tilt();
     preferences.putULong("lastMotorAdjust", currentTime);

@@ -135,24 +135,78 @@ void handleRoot() {
 }
 
 void handleSetMode() {
-    if (server.hasArg("mode")) {
-        String mode = server.arg("mode");
-        preferences.begin("esp32_config", false);
-        preferences.putString("mode", mode);  // Save mode to NVS
-        server.send(200, "text/plain", "Mode set to " + mode + ". ESP32 will restart.");
-        if (mode == "WiFi" && server.hasArg("ssid") && server.hasArg("password")) {
-          String ssid = server.arg("ssid");
-          String password = server.arg("password");
-          preferences.putString("ssid", ssid);
-          preferences.putString("password", password);
-        }
-        preferences.putBool("justDebugged", true);
-        preferences.end();
-        delay(1000);
-        ESP.restart();  // Restart ESP to apply the selected mode
-    } else {
-        server.send(400, "text/plain", "Invalid Request");
+  if (!server.hasArg("mode") 
+   || server.arg("mode") != "WiFi"
+   || !server.hasArg("ssid")
+   || !server.hasArg("password")) {
+    server.send(400, "text/plain", "Invalid Request");
+    return;
+  }
+
+  String ssid     = server.arg("ssid");
+  String password = server.arg("password");
+
+  // 1) Switch into dual AP+STA mode and kick off connection
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAP(AP_SSID, AP_PASSWORD);      // keep AP up
+  WiFi.begin(ssid.c_str(), password.c_str());
+
+  // 2) Wait up to 30s for connection
+  unsigned long start = millis();
+  bool connected = false;
+  while (millis() - start < 30000) {
+    if (WiFi.status() == WL_CONNECTED) {
+      connected = true;
+      break;
     }
+    delay(500);
+  }
+
+  // 3a) Success → save creds & prompt for reboot
+  if (connected) {
+    preferences.begin("esp32_config", false);
+    preferences.putString("ssid", ssid);
+    preferences.putString("password", password);
+    preferences.putString("mode", "WiFi");
+    preferences.putBool("justDebugged", true);
+    preferences.end();
+
+    String html = R"rawliteral(
+    <!DOCTYPE html>
+    <html>
+      <body style="font-family:Arial,sans-serif;text-align:center">
+        <h2>Wi-Fi OK: )rawliteral" + ssid + R"rawliteral(</h2>
+        <form action="/setMqtt" method="POST">
+          <p>MQTT Server: <input name="server"   placeholder="e.g. broker.hivemq.com"></p>
+          <p>Port:         <input name="port"     placeholder="1883"></p>
+          <p>Topic:        <input name="topic"    placeholder="solar_panel/data"></p>
+          <button type="submit">Test & Save MQTT</button>
+        </form>
+        <p>Or press debug button to stay here.</p>
+      </body>
+    </html>
+    )rawliteral";
+
+    server.send(200, "text/html", html);
+    return;
+  }
+
+  // 3b) Failure → go back to form with error
+  WiFi.softAP(AP_SSID, AP_PASSWORD);  // re‑enable AP only
+  String html = R"rawliteral(
+    <!DOCTYPE html>
+    <html>
+    <head><title>Wi-Fi Failed</title></head>
+    <body style="font-family:Arial,sans-serif;text-align:center;">
+      <h2>Failed to connect to )rawliteral"
+    + ssid +
+    R"rawliteral(</h2>
+      <p>Please <a href="/">try again</a> with different credentials.</p>
+    </body>
+    </html>
+  )rawliteral";
+
+  server.send(200, "text/html", html);
 }
 
 void handleSetMqtt() {
@@ -184,7 +238,7 @@ void handleSetMqtt() {
       testClient.disconnect();
       break;
     }
-    delay(200);
+    delay(500);
   }
 
   if (ok) {
@@ -221,6 +275,9 @@ void handleSetMqtt() {
 
 void handleReboot() {
   server.send(200, "text/plain", "Rebooting now…");
+  preferences.begin("esp32_config", false);
+  preferences.putBool("justDebugged", true);
+  preferences.end();
   delay(1000);
   ESP.restart();
 }
@@ -326,7 +383,7 @@ bool connectWiFi() {
       preferences.end();
       ESP.restart();
     }
-    delay(200);
+    delay(500);
     Serial.print(".");
     retry_attempt++;
   }
@@ -365,8 +422,8 @@ bool connectMQTT() {
       retry_attempt++;
       Serial.print("Failed, rc=");
       Serial.print(client.state());
-      Serial.println(" Retrying in 200ms...");
-      delay(200);
+      Serial.println(" Retrying in 500ms...");
+      delay(500);
     }
   }
   preferences.end();
@@ -411,6 +468,11 @@ bool publishData() {
     }
     Serial.println("Failed to publish through MQTT, trying again...");
     retry_attempt++;
+  }
+  unsigned long t0 = millis();
+  while (millis() - t0 < 200) {
+    client.loop();
+    delay(1);
   }
   Serial.println("Successfully published data through MQTT!");
   return true;

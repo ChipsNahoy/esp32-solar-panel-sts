@@ -8,6 +8,7 @@ extern bool rtc_state;
 extern bool isDaylight;
 extern const int wakeupIntervalDaySec;
 extern const int wakeupIntervalNightSec;
+extern const int motorInterval;
 extern unsigned long lastMotorAdjust;
 
 bool should_sync_RTC();

@@ -8,6 +8,8 @@
 #define PWM_SPEED 255
 #define MIN_PWM 60
 #define KP 150
+#define ANGLE_THRESH 0.5   // degrees: “movement” threshold
+#define SAMPLE_DELAY 100   // ms between angle reads
 
 void setup_motor() {
   pinMode(RPWM, OUTPUT);
@@ -20,9 +22,7 @@ void adjust_panel_tilt() {
   while (true) {
     uv_readings uv = read_uv();
     float diff = uv.leftUV - uv.rightUV;
-    if (Serial.available()) {
-      Serial.print("Diff (L-R): "); Serial.println(diff);
-    }
+    Serial.print("Diff (L-R): "); Serial.println(diff);
     if (abs(diff) > TOLERANCE) {
       digitalWrite(EN, HIGH);
       int pwm = min(int(abs(diff) * KP), 255);
@@ -48,7 +48,24 @@ void adjust_panel_tilt() {
 void moveToLowestPosition() {
   digitalWrite(EN, HIGH);
   analogWrite(RPWM, PWM_SPEED);
-  delay(20000);
+  analogWrite(LPWM, 0);
+
+  // Take one initial angle reading
+  float lastPitch = read_mpu().pitch;
+
+  // Loop until movement under threshold
+  while (true) {
+    delay(SAMPLE_DELAY);
+    float currentPitch = read_mpu().pitch;
+
+    // if angle change is tiny → we’ve hit the stop
+    if (fabs(currentPitch - lastPitch) < ANGLE_THRESH) {
+      break;
+    }
+    lastPitch = currentPitch;
+  }
+
+  // cut power
   digitalWrite(EN, LOW);
   analogWrite(RPWM, 0);
   analogWrite(LPWM, 0);

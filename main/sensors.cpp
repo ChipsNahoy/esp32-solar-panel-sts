@@ -22,43 +22,51 @@ Adafruit_INA219 ina(0x41);
 bool ina_state = false;
 
 uv_readings read_uv() {
-  uv_readings readings;
-  const int numReadings = 5;
-  float leftUVSum = 0.0;
-  float rightUVSum = 0.0;
-  int leftCount = 0;
-  int rightCount = 0;
-  const int maxAttempts = numReadings * 4;
-
-  int attempts = 0;
-  while ((leftCount < numReadings || rightCount < numReadings) && attempts < maxAttempts) {
-    float leftValue = getUV(l_uv_adc_pin);
-    float rightValue = getUV(r_uv_adc_pin);
-
-    if (leftValue != -8.33 && leftCount < numReadings) {
-      leftUVSum += leftValue;
-      leftCount++;
-    }
-
-    if (rightValue != -8.33 && rightCount < numReadings) {
-      rightUVSum += rightValue;
-      rightCount++;
-    }
-
-    attempts++;
+  const int N = 7;                     // must be odd
+  float left[N], right[N];
+  
+  // 1) Gather N samples
+  for (int i = 0; i < N; i++) {
+    left[i]  = getUV(l_uv_adc_pin);
+    right[i] = getUV(r_uv_adc_pin);
+    delay(10);                         // give ADS time to settle
   }
 
-  readings.leftUV =  (maxAttempts > attempts) ? (leftUVSum  / leftCount)  : -8.33;
-  readings.rightUV = (maxAttempts > attempts) ? (rightUVSum / rightCount) : -8.33;
+  // 2) Sort both arrays
+  std::sort(left,  left + N);
+  std::sort(right, right + N);
 
-  return readings;
+  // 3) Sum the “middle” values (index 1 through N-2), discarding min & max
+  float ls = 0, rs = 0;
+  for (int i = 1; i < N - 1; i++) {
+    ls += left[i];
+    rs += right[i];
+  }
+
+  // 4) Compute final average
+  uv_readings r;
+  r.leftUV  = ls / (N - 2);
+  r.rightUV = rs / (N - 2);
+  return r;
+}
+
+mpu_readings read_mpu() {
+  sensors_event_t a, g, temp;
+  mpu.getEvent(&a, &g, &temp);
+  float ax = a.acceleration.x;
+  float ay = a.acceleration.y;
+  float az = a.acceleration.z;
+
+  mpu_readings readings;
+  readings.roll  = atan2(ay, sqrt(ax * ax + az * az)) * 180.0 / PI;
+  readings.pitch = atan2(-ax, sqrt(ay * ay + az * az)) * 180.0 / PI;
 }
 
 // Supporting Functions
 float get_load_current() {
   int16_t iRaw = ads.readADC(acs_adc_pin);
   float voltage = iRaw * 0.125 / 1000.0;
-  return (voltage - 2.5)/0.04;
+  return ((voltage - 2.5)/0.04) * 1000.00;
 }
 
 float get_load_voltage() {
@@ -85,14 +93,9 @@ sensor_data prepData() {
   sensor_data datas;
   
   if (mpu_state) {
-    sensors_event_t a, g, temp;
-    mpu.getEvent(&a, &g, &temp);
-    float ax = a.acceleration.x;
-    float ay = a.acceleration.y;
-    float az = a.acceleration.z;
-
-    datas.roll  = atan2(ay, sqrt(ax * ax + az * az)) * 180.0 / PI;
-    datas.pitch = atan2(-ax, sqrt(ay * ay + az * az)) * 180.0 / PI;
+    mpu_readings mpu_reads = read_mpu();
+    datas.roll  = mpu_reads.roll;
+    datas.pitch = mpu_reads.pitch;
   }
   else {
     datas.roll  = -99;

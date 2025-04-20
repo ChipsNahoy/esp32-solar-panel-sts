@@ -7,6 +7,8 @@
 #include <WebServer.h>
 #include <ESPmDNS.h>
 #include <PubSubClient.h>
+#define MQTT_MAX_PACKET_SIZE 512
+#define MQTT_KEEPALIVE 60
 
 extern const char* AP_SSID;
 extern const char* AP_PASSWORD;

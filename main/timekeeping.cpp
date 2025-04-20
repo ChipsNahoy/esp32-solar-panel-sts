@@ -5,7 +5,7 @@
 // RTC Variables
 RTC_DS3231 rtc;
 bool rtc_state = false;
-const long seconds_before_rtc_sync = 180; // Weekly(604800) Hourly(3600) 
+const long seconds_before_rtc_sync = 24 * 3600; // Weekly(604800) Hourly(3600) 
 
 // Timekeeping Variables
 const char* ntpServer1 = "pool.ntp.org";
@@ -14,8 +14,9 @@ const char* ntpServer3 = "time.google.com";
 const long  gmtOffset_sec = 7 * 3600; // Adjust for your timezone (e.g., GMT+7)
 const int   daylightOffset_sec = 0;  // No daylight saving
 bool isDaylight = true;
-const int wakeupIntervalDaySec = 15;
-const int wakeupIntervalNightSec = 60;
+const int wakeupIntervalDaySec = 60;
+const int wakeupIntervalNightSec = 15 * 60;
+const int motorInterval = 5 * 60;
 unsigned long lastMotorAdjust;
 
 bool should_sync_RTC() {
@@ -23,12 +24,12 @@ bool should_sync_RTC() {
   time_t lastSync = preferences.getULong("lastSync", 0);
   preferences.end();
 
-  return (time(nullptr) - lastSync) >= seconds_before_rtc_sync;
+  return (rtc.now().unixtime() - lastSync) >= seconds_before_rtc_sync;
 }
 
 void mark_RTC_synced() {
   preferences.begin("rtc_sync", false);
-  preferences.putULong("lastSync", time(nullptr));
+  preferences.putULong("lastSync", rtc.now().unixtime());
   preferences.end();
 }
 
@@ -89,7 +90,7 @@ bool getCurrentTime(struct tm &out) {
 }
 
 void check_panel_interval(time_t currentTime, unsigned long lastMotorAdjust) {
-  if ((currentTime - lastMotorAdjust) >= (15 * 60)) {
+  if ((currentTime - lastMotorAdjust) >= (motorInterval)) {
     Serial.println("Performing Motor Adjustment");
     adjust_panel_tilt();
     preferences.begin("esp32_config", false);
