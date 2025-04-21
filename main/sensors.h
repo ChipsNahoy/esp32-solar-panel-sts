@@ -28,7 +28,7 @@ struct mpu_readings {
 
 struct sensor_data {
   float l_uv, r_uv, v1, i1, v2, i2, roll, pitch, espTemperature;
-  char timestamp[20];
+  char datetime[20];
 };
 
 // ESP32 Internal Temperature Sensor

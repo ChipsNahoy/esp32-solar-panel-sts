@@ -17,6 +17,7 @@ void setup() {
   Serial.println("Saved Mode: " + savedMode);
   preferences.end();
   setup_suite();
+  Serial.print("Current ESP32 temperature: "); Serial.print(get_esp_temperature()); Serial.print(" C");
 
   if (savedMode == "DEBUG") {
       // Start in Debug Mode (Wi-Fi AP + Web Server)
@@ -53,6 +54,10 @@ void setup() {
           back_to_debug();
         }
         client.setServer(MQTT_BROKER.c_str(), MQTT_PORT);
+        if (!client.setBufferSize(512)) {
+          Serial.println("Failed to enlarge MQTT buffer!");
+        }
+        client.setKeepAlive(60);
         if (connectMQTT()) {
           client.loop();
           process_routine();

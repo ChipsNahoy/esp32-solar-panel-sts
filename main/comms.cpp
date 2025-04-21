@@ -8,6 +8,13 @@
 const char* AP_SSID = "ESP32_Debug_Mode";
 const char* AP_PASSWORD = "debugmode";
 
+// MQTT Message Identifier
+const char* GROUP_ID    = "solar_panel_TA";           
+const int   OWNER_ID    = 212100207;                  
+const char* CATEGORY    = "Electrical";               
+const char* KAFKA_TOPIC = "212100207/solar_panel_TA";
+const char* USE_KAFKA   = "true";
+
 // Web Server
 WebServer server(80);
 
@@ -440,40 +447,84 @@ bool publishData() {
   preferences.end();
   int retry_attempt = 0;
   sensor_data data = prepData();
-  if (data.l_uv < -8) {
+  if (data.l_uv < 0) {
     Serial.print("Left UV Problem, analog value: ");
     Serial.println(ads.readADC(0));
     addError("Left UV Problem");
   }
-  if (data.r_uv < -8) {
+  if (data.r_uv < 0) {
     Serial.print("Right UV Problem, analog value: ");
     Serial.println(ads.readADC(1));
     addError("Right UV Problem");
   }
+  String deviceId = WiFi.macAddress();
   char payload[512];
-  if (errorMsg.isEmpty()) {
-    snprintf(payload, sizeof(payload),
-      "{\"l_uv\":%.2f,\"r_uv\":%.2f,\"v1\":%.2f,\"i1\":%.2f,\"v2\":%.2f,\"i2\":%.2f,\"roll\":%.2f,\"pitch\":%.2f,\"time\":\"%s\",\"espTemperature\":%.2f,\"error\":\"OK\"}",
-      data.l_uv, data.r_uv, data.v1, data.i1, data.v2, data.i2, data.roll, data.pitch, data.timestamp, data.espTemperature);
-  } else {
-    snprintf(payload, sizeof(payload),
-      "{\"l_uv\":%.2f,\"r_uv\":%.2f,\"v1\":%.2f,\"i1\":%.2f,\"v2\":%.2f,\"i2\":%.2f,\"roll\":%.2f,\"pitch\":%.2f,\"time\":\"%s\",\"espTemperature\":%.2f,\"error\":\"%s\"}",
-      data.l_uv, data.r_uv, data.v1, data.i1, data.v2, data.i2, data.roll, data.pitch, data.timestamp, data.espTemperature, errorMsg.c_str());
+  int len = snprintf(payload, sizeof(payload),
+    "{"
+      "\"device_id\":\"%s\","
+      "\"group_id\":\"%s\","
+      "\"owner_id\":%d,"
+      "\"category\":\"%s\","
+      "\"values\":{"
+        "\"l_uv\":%.2f,"
+        "\"r_uv\":%.2f,"
+        "\"v1\":%.2f,"
+        "\"i1\":%.2f,"
+        "\"v2\":%.2f,"
+        "\"i2\":%.2f,"
+        "\"roll\":%.2f,"
+        "\"pitch\":%.2f,"
+        "\"espTemperature\":%.2f,"
+        "\"error\":\"%s\""
+      "},"
+      "\"timestamp_sensor\":\"%s\","
+      "\"kafka\":%s,"
+      "\"kafka_topic\":\"%s\""
+    "}",
+    deviceId.c_str(),
+    GROUP_ID,
+    OWNER_ID,
+    CATEGORY,
+    data.l_uv,
+    data.r_uv,
+    data.v1,
+    data.i1,
+    data.v2,
+    data.i2,
+    data.roll,
+    data.pitch,
+    data.espTemperature,
+    errorMsg.isEmpty() ? "OK" : errorMsg.c_str(),
+    data.datetime,
+    USE_KAFKA,
+    KAFKA_TOPIC
+  );
+
+  Serial.printf("Payload length = %d bytes\n", len);
+  if (len < 0 || len >= int(sizeof(payload))) {
+    Serial.println("Payload too large!");
+    return false;
   }
+
   Serial.println("Data to be Published: " + String(payload));
+  client.loop();
   while (!client.publish(MQTT_TOPIC.c_str(), payload)) {
     if (retry_attempt > 3) {
+      Serial.print("Publish failed, state=");
+      Serial.println(client.state());
       Serial.println("Failed to publish through MQTT 3 times, skipping data transfer...");
       return false;
     }
     Serial.println("Failed to publish through MQTT, trying again...");
     retry_attempt++;
   }
+  
   unsigned long t0 = millis();
   while (millis() - t0 < 200) {
     client.loop();
     delay(1);
   }
+
   Serial.println("Successfully published data through MQTT!");
   return true;
 }

@@ -60,6 +60,7 @@ mpu_readings read_mpu() {
   mpu_readings readings;
   readings.roll  = atan2(ay, sqrt(ax * ax + az * az)) * 180.0 / PI;
   readings.pitch = atan2(-ax, sqrt(ay * ay + az * az)) * 180.0 / PI;
+  return readings;
 }
 
 // Supporting Functions
@@ -91,17 +92,17 @@ float get_esp_temperature() {
 
 sensor_data prepData() {
   sensor_data datas;
-  
   if (mpu_state) {
     mpu_readings mpu_reads = read_mpu();
     datas.roll  = mpu_reads.roll;
     datas.pitch = mpu_reads.pitch;
+    
   }
   else {
     datas.roll  = -99;
     datas.pitch = -99;
   }
-
+  
   if (ads_state) {
     uv_readings uv = read_uv();
     datas.l_uv  = uv.leftUV;
@@ -115,6 +116,7 @@ sensor_data prepData() {
     datas.v1    = -99;
     datas.i1    = -99;
   }
+  
   if (ina_state) {
     datas.v2    = abs(ina.getBusVoltage_V());
     datas.i2    = abs(ina.getCurrent_mA());
@@ -124,37 +126,21 @@ sensor_data prepData() {
     datas.i2    = -99;
   }
 
-  int  yr, mo, day, hr, min, sec;
+  datas.espTemperature = get_esp_temperature();
+  struct tm tm;
   if (rtc_state) {
     DateTime now = rtc.now();
-    yr  = now.year();
-    mo  = now.month();
-    day = now.day();
-    hr  = now.hour();
-    min = now.minute();
-    sec = now.second();
+    tm.tm_year = now.year() - 1900;
+    tm.tm_mon  = now.month() - 1;
+    tm.tm_mday = now.day();
+    tm.tm_hour = now.hour();
+    tm.tm_min  = now.minute();
+    tm.tm_sec  = now.second();
     datas.espTemperature = rtc.getTemperature();
+  } else if (!getLocalTime(&tm)) {
+    memset(&tm, 0, sizeof(tm));
   }
-  else {
-    struct tm tm;
-    if (getLocalTime(&tm)) {
-      yr  = tm.tm_year + 1900;
-      mo  = tm.tm_mon  + 1;
-      day = tm.tm_mday;
-      hr  = tm.tm_hour;
-      min = tm.tm_min;
-      sec = tm.tm_sec;
-    } else {
-      // fallback values if time not available
-      yr = mo = day = hr = min = sec = 0;
-    }
-    datas.espTemperature = get_esp_temperature();
-  }
-
-  // format "YYYY-MM-DD HH:MM:SS"
-  snprintf(datas.timestamp, sizeof(datas.timestamp),
-           "%04d-%02d-%02d %02d:%02d:%02d",
-           yr, mo, day, hr, min, sec);
+  strftime(datas.datetime, sizeof(datas.datetime), "%Y-%m-%dT%H:%M:%SZ", &tm);
   
   return datas;
 }

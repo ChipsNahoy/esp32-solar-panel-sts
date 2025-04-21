@@ -84,7 +84,6 @@ void process_routine() {
   }
   checkDaytime();
   if (WiFi.status() == WL_CONNECTED) publishData();
-  Serial.print("Current ESP32 temperature: "); Serial.print(get_esp_temperature()); Serial.print(" C");
   Serial.println();
   Serial.println();
   preferences.end();

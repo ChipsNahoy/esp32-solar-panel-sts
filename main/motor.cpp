@@ -9,7 +9,7 @@
 #define MIN_PWM 60
 #define KP 150
 #define ANGLE_THRESH 0.5   // degrees: “movement” threshold
-#define SAMPLE_DELAY 100   // ms between angle reads
+#define SAMPLE_DELAY 500   // ms between angle reads
 
 void setup_motor() {
   pinMode(RPWM, OUTPUT);
@@ -40,6 +40,7 @@ void adjust_panel_tilt() {
       digitalWrite(EN, LOW);
       analogWrite(RPWM, 0);
       analogWrite(LPWM, 0);
+      Serial.println("Panel balanced");
       break;
     }
   }
